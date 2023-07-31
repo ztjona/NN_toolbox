@@ -1,5 +1,6 @@
 function error = MSE(t, y, w)
-%MSE() mean square error.
+%MSE() mean square error. Although techincally is not mean but sum. It is
+%done this way to avoid constants in the derivatives of the gradient.
 %
 % # USAGE
 %   error = MSE(t, y);
@@ -12,6 +13,8 @@ function error = MSE(t, y, w)
 % # OUTPUTS
 %  error    MSE
 %
+% # NOTES
+% In Bishop [Pattern Recognition and ML] it uses sum of square errors.
 
 %{
 Laboratorio de Inteligencia y Visión Artificial
@@ -40,4 +43,5 @@ assert(isequal(size(t), size(y)), ...
 assert(numel(w) == 1 || size(w, 2) == size(y, 2),"wrong number of weights")
 
 %%
-error = mean(mean((t - y).^2, 1).*w, 2); % ?ñ omit nan?
+% error = mean(mean((t - y).^2, 1).*w, 2);
+error = sum( sum( (t - y).^2, 1 ).*w, 2 );

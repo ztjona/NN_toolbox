@@ -31,13 +31,17 @@ classdef NN
     end
 
     properties (Hidden=true, SetAccess=private)
-
+        bias_mask; %cell with booleans that distinguish the bias from the
+        % weights inside the learnable matrix.
+        d_loss; % derivative with respect to the prediction y.
     end
 
     methods
         %% External methods
         % -----------------------------------------------------------------
         obj = train(obj, X, Y, options);
+
+        gradient = calculate_numerical_gradient(obj, X, Y, Ws_flat);
 
         %% Constructor
         % -----------------------------------------------------------------
@@ -99,8 +103,10 @@ classdef NN
             % [Weights bias]
             switch options.weights_initialization
                 case "glorot"
-                    [obj.Ws, obj.n_learnables] = ...
-                        NN.glorot_initialization(length_input, neurons_by_layer);
+                    [obj.Ws, obj.n_learnables, obj.bias_mask] = ...
+                        NN.glorot_initialization( ...
+                        length_input, neurons_by_layer );
+
                 otherwise
                     error( ...
                         "Given algorithm [%s] for weight initialization not defined. Use 'glorot'", ...
@@ -122,6 +128,7 @@ classdef NN
             % # ---- retrieving from task_type
             obj.activations{end} = task_type.activation_fcn;
             obj.loss_fcn = task_type.loss_fcn;
+            obj.d_loss = task_type.d_loss;
 
         end
 
@@ -150,20 +157,22 @@ classdef NN
         end
         %%
         % -----------------------------------------------------------------
-        function [y, As, Zs] = propagate(obj, X)
+        function [y, As, Zs] = propagate(obj, X, Ws)
             %obj.propagate() runs the forward propagation of the network
             %
             %# INPUTS
-            %* X            -n-by-m, n examples, m features
+            %* X            :n-by-m, n examples, m features
+            %* Ws           :weights for the propagation, defaults to the
+            %               obj weights.
             %
             %# OUTPUTS
-            %* y        -n-by-o, prediction with n examples, o number of
+            %* y        :n-by-o, prediction with n examples, o number of
             %           outputs.
-            %* As       -cell with every cell corresponding to the input
+            %* As       :cell with every cell corresponding to the input
             %           and the following layers.
             %           It has the values of the after activation values of
             %           each neuron in that layer.
-            %* Zs       -cell with every cell corresponding to a layer.
+            %* Zs       :cell with every cell corresponding to a layer.
             %           It has the values of the pre activation values of
             %           each neuron in that layer.
             %
@@ -175,6 +184,7 @@ classdef NN
             arguments
                 obj
                 X        (:, :) double
+                Ws       (1, :) cell = obj.Ws;
             end
 
             % # ----
@@ -186,7 +196,7 @@ classdef NN
             As{1} = X;
 
             for i = 1:obj.n_layers
-                Zs{i} =  [As{i} v_ones]*obj.Ws{i};
+                Zs{i} =  [As{i} v_ones]*Ws{i};
 
                 As{i+ 1} = NN.apply_activation_fcn(Zs{i}, ...
                     obj.activations{i});
@@ -198,8 +208,18 @@ classdef NN
     methods (Static)
         %% External static methods
         % -----------------------------------------------------------------
-        [Ws, n_learnables] = glorot_initialization(neurons_by_layer);
+        [Ws, n_learnables, bias_mask] = glorot_initialization( ...
+            neurons_by_layer);
 
+        Ws = unflatten_weights(Ws_f, n_inputs, neurons_by_layer);
+
+        ws_f = flat_weights( Ws, n_learnables );
+
+        A_p = apply_deriv_activation_fcn(Z, fcn_name);
+
+        [X_s, mu, sigma] = standarize( X, mu, sigma );
+
+        [Xtrain, Ytrain, Xtest, Ytest] = hold_out( X, Y, train_fraction );
         %%
         % -----------------------------------------------------------------
         function A = apply_activation_fcn(Z, fcn_name)
@@ -213,7 +233,7 @@ classdef NN
             %* A    -> A = fcn_name(Z)
             %
             % # Example
-            %>>  A = apply_activation_fcn([.2 .3; .4 .5], "tanh")
+            %>>  A = NN.apply_activation_fcn([.2 .3; .4 .5], "tanh")
             %
 
             % # ---- Data Validation
@@ -229,7 +249,7 @@ classdef NN
                 case 'relu'
                     A = Z;
                     %A(Z <= 0) = 0;if it is 0, then is already changed to 0
-                    A(isAlways( Z < 0 )) = 0;
+                    A(Z < 0) = 0;
                 case 'purelin'
                     A = Z;
                 case 'softmax'

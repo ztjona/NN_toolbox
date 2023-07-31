@@ -1,4 +1,5 @@
-function [Ws, n_ws] = glorot_initialization(length_input, neurons_by_layer)
+function [Ws, n_ws, bias_mask] = glorot_initialization(length_input, ...
+    neurons_by_layer)
 %glorot_initialization() creates a set of weights and biases using the
 %glorot algorithm with normal distribution. Biases are initilized with 0s.
 %
@@ -48,15 +49,17 @@ function [Ws, n_ws] = glorot_initialization(length_input, neurons_by_layer)
 %   Ws = NN.glorot_initialization(neurons_by_layer);
 %
 % # INPUTS
-%  length_input         -number of features in the input
-%  neurons_by_layer     -array with the number of neurons by layer,
+%  length_input         :number of features in the input
+%  neurons_by_layer     :array with the number of neurons by layer,
 %                       excludes the input
 %
 % # OUTPUTS
-%  Ws                   -cell with each element having the weight matrix of
+%  Ws                   :cell with each element having the weight matrix of
 %                       the corresponding layer. Recall, weights and biases
 %                       are concatenated as [Weights bias].
 %  n_ws                 :number of learnables
+%  bias_mask            :cell with booleans that distinguish the bias from
+%                       the weights inside the learnable matrix.
 %
 % # EXAMPLES
 %>> NN.glorot_initialization(2, [3 4])
@@ -85,6 +88,7 @@ end
 %%
 n_layers = numel(neurons_by_layer);
 Ws = cell(1, n_layers);
+bias_mask = cell(1, n_layers);
 
 n0 = length_input;
 n_ws = 0;
@@ -92,7 +96,9 @@ for i = 1:n_layers
     % [Weights bias]
     n1 = neurons_by_layer(i);
     sigma = sqrt(2/ (n0 + n1));
-    Ws{i} = [normrnd(0, sigma, [n0, n1]); zeros(1, n1)];
+    Ws{i} = [normrnd(0, sigma, [n0 n1]); zeros( 1, n1 )];
+
+    bias_mask{i} = [false( [n0 n1] ); true( 1, n1 )];
 
     n_ws = n_ws + numel( Ws{i} );
 

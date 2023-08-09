@@ -33,14 +33,15 @@ switch fcn_name
     case 'purelin'
         A = ones( size ( Z ) );
 
+    case 'sigmoid'
+        expMZ = exp( -Z );
+        A = expMZ./(1 + expMZ).^2;
     case 'softmax'
         % In the case of A: 100x3 (100 examples, 3 features)
         s = NN.apply_activation_fcn( Z, fcn_name ); % could be spared...
         A = s.*(1 - s);
 
-
     otherwise
         error("Activation  function: %s not defined", fcn_name)
-
 end
 end

@@ -24,6 +24,7 @@ classdef NN
         n_layers; % number of layers, igonoring input, including outputs
         loss_fcn; % depends on the task: i.e. regression, classification
         n_learnables;% number of learnables
+        task; % name of the task type either regression or classification
     end
     properties (SetAccess=private)
         Ws; % weights with bias: [Weights' bias']. Note, weights are stored
@@ -42,6 +43,8 @@ classdef NN
         obj = train(obj, X, Y, options);
 
         gradient = calculate_numerical_gradient(obj, X, Y, Ws_flat);
+        
+        training_plots( obj, switch_plot_type, flag_initial, data );
 
         %% Constructor
         % -----------------------------------------------------------------
@@ -129,7 +132,7 @@ classdef NN
             obj.activations{end} = task_type.activation_fcn;
             obj.loss_fcn = task_type.loss_fcn;
             obj.d_loss = task_type.d_loss;
-
+            obj.task = task_type.name;
         end
 
         %%
@@ -220,47 +223,8 @@ classdef NN
         [X_s, mu, sigma] = standarize( X, mu, sigma );
 
         [Xtrain, Ytrain, Xtest, Ytest] = hold_out( X, Y, train_fraction );
-        %%
-        % -----------------------------------------------------------------
-        function A = apply_activation_fcn(Z, fcn_name)
-            %apply_activation_fcn() applies the given activation function
-            %to the input Z.
-            %
-            %# INPUTS
-            %  Z
-            %
-            %# OUTPUTS
-            %* A    -> A = fcn_name(Z)
-            %
-            % # Example
-            %>>  A = NN.apply_activation_fcn([.2 .3; .4 .5], "tanh")
-            %
-
-            % # ---- Data Validation
-            arguments
-                Z        (:, :)
-                fcn_name (1, 1) string
-            end
-
-            % # ----
-            switch fcn_name
-                case 'tanh'
-                    A = tanh(Z);
-                case 'relu'
-                    A = Z;
-                    %A(Z <= 0) = 0;if it is 0, then is already changed to 0
-                    A(Z < 0) = 0;
-                case 'purelin'
-                    A = Z;
-                case 'softmax'
-                    % In the case of A: 100x3 (100 examples, 3 features)
-                    A = exp(Z);
-                    A = A./sum(A, 2);
-                otherwise
-                    error("Activation  function: %s not defined", fcn_name)
-
-            end
-        end
+       
+        A = apply_activation_fcn(Z, fcn_name);
     end
 end
 % More properties at: AbortSet, Abstract, Access, Dependent, GetAccess, ...

@@ -34,10 +34,19 @@ classdef Loss
         regression ( "regression", @(t, y_pred) MSE( t, y_pred )/2, ...
             'purelin', @(t, y_pred) y_pred - t );
 
+        % % fairly good
+%         classification ( "classification", @(t, y_pred) MSE( t, y_pred )/2, ...
+%             'sigmoid', @(t, y_pred) y_pred - t );
 
-        classification ("classification", @ ...
-            (t, y_pred) xentropy(t, y_pred), ...
-            'softmax', @(t, y_pred) -t./y_pred)
+%% supuestamente bien, pero no
+% ver sumatorio
+%         classification ("classification", @ (t, y_pred) xentropy(t, y_pred), ...
+%             'softmax', @(t, y_pred) -t./y_pred)
+
+%
+classification ("classification", @ (t, y_pred) xentropy(t, y_pred), ...
+            'softmax', @(t, y_pred) y_pred - t )
+        
     end
 
     methods

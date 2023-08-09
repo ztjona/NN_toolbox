@@ -19,10 +19,10 @@ function obj = train(obj, X, Y, options)
 %                   used to report metrics.
 %       *plot       : flag to plot or not
 %       *plot_freq  : number of epoch to plot progress
-%       *plot_pred       : flag to plot or not the prediction and target of
-%                        the network.
-%       *plot_pred_freq  : number of epoch to plot progress of the
-%                         predictions.
+%       *plot_include_pred       : flag to plot or not the prediction and
+%                               target of the network.
+%       *plot_include_pred_freq  : number of epoch to plot progress of the
+%                         predictions. Must be multiple of plot_freq.
 %
 % # OUTPUTS
 %  obj          :trained network.
@@ -53,15 +53,16 @@ arguments
 
     options.plot (1, 1) logical = true;
 
-    options.plot_pred (1, 1) logical = false;
+    options.plot_include_pred (1, 1) logical = false;
 
-    options.plot_pred_freq (1,1) double {mustBeInteger, mustBePositive}=10;
+    options.plot_include_pred_freq (1,1) double {mustBeInteger, ...
+        mustBePositive}=10;
 
     options.plot_freq (1, 1) double {mustBeInteger, mustBePositive} = 10;
     % epochs
 
     options.verbose_freq (1, 1) double{mustBeInteger, mustBePositive} = 10;
-    options.plot_grad (1, 1) logical = false; % very slow
+    options.plot_include_grad (1, 1) logical = false; % very slow
 end
 
 assert(isequal(size(X, 1), size(Y, 1)), ...
@@ -97,91 +98,39 @@ unflatten = @ (Ws_f) NN.unflatten_weights( ...
 
 flatten = @ (Ws) NN.flat_weights( Ws, obj.n_learnables );
 
-%% # Gradient calculation
-% -- Backwards propagation
 error = cell( 1, obj.n_layers ); % prealloc
 
-
-%% # Training!
 w_flat = flatten( obj.Ws );
 bias_mask = flatten( obj.bias_mask ); % as vector
 
-alpha = options.learning_rate;
-
 losses = zeros( 1, options.n_epoch ); % training
 losses_test = nan( 1, options.n_epoch ); % testing
+grad_avg = zeros( 1, options.n_epoch );
 
-% -- initial drawing
+%% Plotting initials
 if options.plot
-    ax = figurePRO(2);
-    plot( ax, losses, '.-' );
-    plot( ax, losses_test, 'o-' );
-    title( ax, "Training progress" );
-    xlabel( ax, "Epoch" );
-    ylabel( ax, "Loss" );
+    data.losses = losses;
+    data.losses_test = losses_test;
+    data.options.plot_include_grad = options.plot_include_grad;
 
-    legend( ax, "Train", "Test" )
-    ax.YScale = 'log';
-    ax.Legend.Color = 'none';
+    obj.training_plots( "Loss", true, data );
 
-    if options.plot_grad
-        yyaxis(ax, "right")
-        grad_avg = zeros(1, options.n_epoch);
-        grad_std = zeros(1, options.n_epoch);
-        errorbar(ax, grad_avg, grad_std)
+    if options.plot_include_pred
+        data = [];
+        data.X = X;
+        data.X_train = X_train;
+        data.X_test = X_test;
+        data.Y = Y;
+        data.Y_pred_train = obj.propagate( X_train );
+        data.Y_pred_test = obj.propagate( X_test );
+
+        obj.training_plots( "Pred", true, data );
     end
 end
 
-class = @(Yi)isequal()
-% -- initial drawing of prediction
-if options.plot_pred
-    switch obj.n_outputs
-        case 1
-            ax_pred = figurePRO(3);
-            scatter( ax_pred, X, Y, 'filled' );
-            title( ax_pred, "Evaluation initial" );
-            scatter( ax_pred, X_train, obj.propagate( X_train ), '.' );
-            scatter( ax_pred, X_test, obj.propagate( X_test ) );
-            xlabel( ax_pred, "X" );
-            ylabel( ax_pred, "Y" );
-            legend( ax_pred, "Data", "Train pred.", "Test pred.", ...
-                "Location", "best" )
-            ax_pred.Legend.Color = 'none';
+%% # Training!
+alpha = options.learning_rate;
 
-            ax_pred.YLim = [-1.1 1.1];
-        case 2
-            if obj.n_input_feats == 2
-            ax_pred = figurePRO(3);
-            c = [[1 0 0]; [0 0 1]];
-            
-            scatter(ax_pred, X(:, 1), X(:, 2),1000, ...
-                c(onehotdecode(Y,1:obj.n_outputs, 2), :)*0.8,'filled',MarkerFaceAlpha =0.1,...
-            MarkerEdgeAlpha=0.1)
-
-            scatter(ax_pred, X_train(:, 1), X_train(:, 2),10, ...
-                c(onehotdecode(Y_train,1:obj.n_outputs, 2), :),"filled", MarkerFaceAlpha =0.7,...
-            MarkerEdgeAlpha=0.7)
-
-            scatter(ax_pred, X_test(:, 1), X_test(:, 2),10,...
-                c(onehotdecode(Y_test,1:obj.n_outputs, 2), :),MarkerFaceAlpha =0.7,...
-            MarkerEdgeAlpha=0.7,Marker="+")
-
-            title( ax_pred, "Evaluation initial" );
-
-            xlabel( ax_pred, "X1" );
-            ylabel( ax_pred, "X2" );
-            legend( ax_pred, "Data", "Train pred.", "Test pred.", ...
-                "Location", "best" )
-            ax_pred.Legend.Color = 'none';
-
-            % ax_pred.YLim = [-1.1 1.1];
-            else
-
-            end
-    end
-end
-drawnow
-% ----------- Loop
 Ws = unflatten( w_flat );
 
 for i = 1:options.n_epoch
@@ -213,14 +162,23 @@ for i = 1:options.n_epoch
         if l == obj.n_layers
             % last layer - output layer
             % 1-by-n_h_units
-            error{l} = der_z_i .* obj.d_loss( Y_train, y_pred );
+            switch obj.task
+                case "regression"
+                    error{l} = der_z_i .* obj.d_loss( Y_train, y_pred );
+                case "classification"
+                    error{l} = obj.d_loss( Y_train, y_pred );
+            end
         else
             % without bias
             ws_expanded = reshape( Ws{l + 1}(1:end - 1, :), 1, ...
                 n_neurons_after, [] );
             ws_expanded = repmat( ws_expanded, n_observations, 1 );
-            back_prop = ws_expanded .* error{l + 1};
-            error{l} = der_z_i.* back_prop;
+
+            err_expanded = repmat( reshape( ...
+                error{l + 1}, n_observations, 1, [] ), 1, n_neurons_after);
+
+            back_prop = ws_expanded .* err_expanded;
+            error{l} = sum( der_z_i.* back_prop, 3 );
         end
 
         gradient_unflat{l} = reshape( sum( error{l}.*A_j_L, 1 ), ...
@@ -228,14 +186,8 @@ for i = 1:options.n_epoch
     end
 
     grad = flatten( gradient_unflat );
-    grad_avg(i) = mean(grad);
-    grad_std(i) = std(grad);
-    if options.plot_grad
-        yyaxis(ax, "right")
-        ax.Children.YData = grad_avg(1:i);
-        ax.Children.YNegativeDelta = grad_std(1:i);
-        ax.Children.YPositiveDelta = grad_std(1:i);
-    end
+    grad_avg(i) = mean( abs( grad ) );
+
     % --- SGD!
 
     % % --- calculate num gradient %% Not working
@@ -256,31 +208,48 @@ for i = 1:options.n_epoch
 
     % --- plot loss
     if options.plot && mod( i, options.plot_freq ) == 0
-        yyaxis(ax, "left")
-        ax.Children(2).YData = losses( 1:i );
-        ax.XLim = [1 i];
+        data.i = i;
+        data.losses = losses(1:i);
+
+        data.options.plot_include_grad = options.plot_include_grad;
+
+        if options.plot_include_grad
+            data.grad_avg = grad_avg(1:i);
+        end
+
+
+
+        % - validation
+        if mod( i, options.validation_rate ) == 0
+            y_pred_test = obj.propagate( X_test, Ws );
+            losses_test(i) = obj.loss_fcn( Y_test, y_pred_test )/n_testing;
+        end
+
+        data.losses_test = losses_test(1:i);
+
+        obj.training_plots( "Loss", false, data );
     end
 
-    % -- initial drawing
-    if options.plot_pred && mod( i, options.plot_pred_freq ) == 0
-        title( ax_pred, sprintf( "Evaluation %d", i ) );
-        ax_pred.Children(2).YData = obj.propagate( X_train, Ws );
-        ax_pred.Children(1).YData = obj.propagate( X_test, Ws );
+    % -- plot pred
+    if options.plot_include_pred && ...
+            mod( i, options.plot_include_pred_freq ) == 0
+        data.i = i;
+
+        data.Y_pred_train = obj.propagate( X_train, Ws );
+        data.Y_pred_test = obj.propagate( X_test, Ws );
+
+        obj.training_plots( "Pred", false, data );
     end
 
-    % ---- validation
-    if mod( i, options.validation_rate ) == 0
-        Ws = unflatten( w_flat ); % updating weights in network
 
-        y_pred_test = obj.propagate( X_test, Ws );
-
-        losses_test(i) = obj.loss_fcn( Y_test, y_pred_test )/n_testing;
-        ax.Children(1).YData = losses_test( 1:i );
-    end
 
     % -- output
     if mod( i, options.verbose_freq ) == 0
         fprintf( "%04d\t%.3e\n", i, losses(i) );
+    end
+    % --
+    if options.plot
+
     end
     drawnow
 end

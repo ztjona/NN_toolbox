@@ -190,12 +190,13 @@ for i = 1:options.n_epoch
 
     % --- SGD!
 
-    % % --- calculate num gradient %% Not working
-    % g_num = obj.calculate_numerical_gradient( X_train, Y_train, w_flat );
+    % % --- calculate num gradient for comprobation! 
+    % Working!
+    %g_num = obj.calculate_numerical_gradient( X_train, Y_train, w_flat );
     %
-    % g_diff = sqrt( sum( grad - g_num ).^2 );
-    % g_diff
-
+    % must be very low
+    %g_diff = sqrt( mean( (grad - g_num ).^2 ) )
+    
     % ---- update weights
     w_f = w_flat; % previous the update
     w_flat = w_flat - alpha*grad;

@@ -12,34 +12,35 @@ function gradient = calculate_numerical_gradient(obj, X, Y, Ws_flat)
 %
 % # OUTPUTS
 %  gradient     :vector of the derivate of the loss function with respect
-%               of each learnable-
+%               of each learnable
 %
 %
 
 % # ----
 
-Ws_temp = Ws_flat; % to be updated
+
 
 
 
 gradient = zeros( size( Ws_flat ) );
 
 for i = 1:numel( Ws_flat )
+    % get the gradient of the ith weight
+    Ws_temp = Ws_flat; % to be updated
+    wi_init = Ws_flat(i);
+
     epsilon = .1;
 
-    % get the gradient of the ith weight
-    wi_init = Ws_temp(i);
-    
 
     for c = 1:1000
         Ws_temp(i) = wi_init + epsilon;
-        
+
 
         wi = NN.unflatten_weights( ...
             Ws_temp, obj.n_input_feats, obj.neurons_by_layer );
 
         y_p = obj.propagate( X, wi );
-        
+
         Ws_temp(i) = wi_init - epsilon;
 
         wi = NN.unflatten_weights( ...
@@ -61,8 +62,6 @@ for i = 1:numel( Ws_flat )
             epsilon = epsilon*0.9;
         end
     end
-
-    gradient(i) = err / (2*epsilon);
-    Ws_temp(i) = wi_init;
+    gradient(i) = (loss_p - loss_n) / (2*epsilon);
 end
 end

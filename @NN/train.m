@@ -11,6 +11,7 @@ function obj = train(obj, X, Y, options)
 %       *batch_size :number of examples to use in the batch size. By
 %                    default uses all the dataset.
 %       *solver     :solver name.
+%       *verbose_freq   :iterations on which console data is displayed.
 %       *regularization_lambda: regularization factor, uses weight decay.
 %       When 0 no regularization by weight decay (default 1e-4). The biases
 %       are excluded from regularization [Murphy].
@@ -23,6 +24,11 @@ function obj = train(obj, X, Y, options)
 %                               target of the network.
 %       *plot_include_pred_freq  : number of epoch to plot progress of the
 %                         predictions. Must be multiple of plot_freq.
+%       *learning_rate_scheduler : type of learning_rate_scheduler, it
+%                           refers to a function handle that returns an
+%                           update of the learning rate, with it and the
+%                           iter as input parameters. Options are:
+%                           "exponential_decay"
 %
 % # OUTPUTS
 %  obj          :trained network.
@@ -63,6 +69,8 @@ arguments
 
     options.verbose_freq (1, 1) double{mustBeInteger, mustBePositive} = 10;
     options.plot_include_grad (1, 1) logical = false; % very slow
+
+    options.learning_rate_scheduler = "none";
 end
 
 assert(isequal(size(X, 1), size(Y, 1)), ...
@@ -84,6 +92,7 @@ assert(isequal(size(Y, 2), obj.n_outputs), ...
 %     end
 % end
 
+t_total = tic();
 %%  Hold out
 [X_train, Y_train, X_test, Y_test] = NN.hold_out( ...
     X, Y, options.hold_out_training );
@@ -129,11 +138,28 @@ if options.plot
 end
 
 %% # Training!
-alpha = options.learning_rate;
+alpha_0 = options.learning_rate;
 
 Ws = unflatten( w_flat );
 
+if options.verbose_freq > 0
+    t_verbose = tic();
+    fprintf("Iter.\t|\tVerbose Time|\t\tLoss\t | metric\n");
+    fprintf("=================================================\n");
+    if obj.task == Loss.classification
+        symbol = "%";
+    else
+        symbol = "";
+    end
+
+end
+
+%------
 for i = 1:options.n_epoch
+    % - update learning rate
+    alpha = learning_rate_schedulers(alpha_0, i, ...
+        options.learning_rate_scheduler);
+
     % --- backpropagate
     gradient_unflat = cell( 1, obj.n_layers ); % same shape as Zs
 
@@ -189,14 +215,16 @@ for i = 1:options.n_epoch
     grad_avg(i) = mean( abs( grad ) );
 
     % --- SGD!
+    %{
+        % % ---comprobation with num gradient
+        g_num = obj.calculate_numerical_gradient( X_train, Y_train, w_flat );
+        % must be very low
+        g_diff = sqrt( mean( (grad - g_num ).^2 ) );
+        temp_i(end + 1) = i;
+        temp_g(end + 1) = g_diff ;
+        % grad = g_num;
+    %}
 
-    % % --- calculate num gradient for comprobation! 
-    % Working!
-    %g_num = obj.calculate_numerical_gradient( X_train, Y_train, w_flat );
-    %
-    % must be very low
-    %g_diff = sqrt( mean( (grad - g_num ).^2 ) )
-    
     % ---- update weights
     w_f = w_flat; % previous the update
     w_flat = w_flat - alpha*grad;
@@ -217,7 +245,6 @@ for i = 1:options.n_epoch
         if options.plot_include_grad
             data.grad_avg = grad_avg(1:i);
         end
-
 
 
         % - validation
@@ -246,11 +273,14 @@ for i = 1:options.n_epoch
 
     % -- output
     if mod( i, options.verbose_freq ) == 0
-        fprintf( "%04d\t%.3e\n", i, losses(i) );
-    end
-    % --
-    if options.plot
+        y_pred_test = obj.propagate( X_test, Ws );
 
+        score = obj.evaluate(X_test, Y_test, y_pred_test);
+
+        fprintf( "%05d\t|\t%.1f[ms]\t|\t%.3e\t | %.2f%s\n", i, ...
+            toc(t_verbose)*1000, losses(i),  score, symbol );
+
+        t_verbose = tic();
     end
     drawnow
 end
@@ -258,5 +288,6 @@ end
 % ---- unflatten weights
 obj.Ws = unflatten( w_f );
 
+fprintf("\n\nTotal training time:\n%s\n", prettyTime(toc(t_total)));
 end
 

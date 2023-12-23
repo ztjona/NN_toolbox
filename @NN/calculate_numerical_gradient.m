@@ -54,7 +54,7 @@ for i = 1:numel( Ws_flat )
         err = abs( (loss_p - loss_n)  / loss_n );
 
 
-        if err < 0.001 && err > 0
+        if err < 0.0001 && err > 0
             break
         elseif err == 0
             epsilon = epsilon*1.1;

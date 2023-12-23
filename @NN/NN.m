@@ -43,8 +43,12 @@ classdef NN
         obj = train(obj, X, Y, options);
 
         gradient = calculate_numerical_gradient(obj, X, Y, Ws_flat);
-        
+
         training_plots( obj, switch_plot_type, flag_initial, data );
+
+        [Y, varargout] = predict(obj, X);
+
+        score = evaluate(obj, X, Y, y_pred_test, metric);
 
         %% Constructor
         % -----------------------------------------------------------------
@@ -223,8 +227,37 @@ classdef NN
         [X_s, mu, sigma] = standarize( X, mu, sigma );
 
         [Xtrain, Ytrain, Xtest, Ytest] = hold_out( X, Y, train_fraction );
-       
+
         A = apply_activation_fcn(Z, fcn_name);
+
+        score = calculate_metric(Y_target, Y_pred, metric);
+
+        function Y_target = categorize(Y_neurons)
+            %NN.categorize() returns the labels by reverting the one-hot
+            %encoding.
+            %
+            %# INPUTS
+            % Y_neurons :n-by-o, prediction with n examples, o number of
+            %           outputs.
+            % # Example
+            %>>  y = NN.categorize([0 1 0;1 0 0;0 0 1])
+            %
+            % y =
+            %
+            %      2
+            %      1
+            %      3
+
+            % # ---- Data Validation
+            arguments
+                Y_neurons (:, :) double
+            end
+
+            % # ----
+
+            %%
+            [~, Y_target] = max(Y_neurons, [], 2);
+        end
     end
 end
 % More properties at: AbortSet, Abstract, Access, Dependent, GetAccess, ...
